@@ -91,9 +91,7 @@
 <div id="modal-root"></div>
 
 <script>
-// ===============================================
-// POLYFILL STORAGE → API (para backend Render)
-// ===============================================
+// POLYFILL STORAGE (más robusto para Render)
 window.storage = {
   async get(key, shared = true) {
     if (!shared) {
@@ -102,27 +100,37 @@ window.storage = {
     }
     try {
       const res = await fetch(`/api/storage/${encodeURIComponent(key)}`);
-      return res.ok ? await res.json() : { value: null };
-    } catch(e) { return { value: null }; }
+      if (!res.ok) return { value: null };
+      return await res.json();
+    } catch(e) {
+      console.warn('Storage GET falló, usando fallback', e);
+      return { value: null };
+    }
   },
   async set(key, value, shared = true) {
     if (!shared) {
       if (value == null) localStorage.removeItem(key);
-      else localStorage.setItem(key, value);
+      else localStorage.setItem(key, typeof value === 'string' ? value : JSON.stringify(value));
       return;
     }
-    await fetch(`/api/storage/${encodeURIComponent(key)}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ value })
-    });
+    try {
+      await fetch(`/api/storage/${encodeURIComponent(key)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ value })
+      });
+    } catch(e) {
+      console.warn('Storage SET falló', e);
+    }
   },
   async delete(key, shared = true) {
     if (!shared) {
       localStorage.removeItem(key);
       return;
     }
-    await fetch(`/api/storage/${encodeURIComponent(key)}`, { method: 'DELETE' });
+    try {
+      await fetch(`/api/storage/${encodeURIComponent(key)}`, { method: 'DELETE' });
+    } catch(e) {}
   }
 };
 // ===============================================
