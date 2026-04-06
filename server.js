@@ -8,28 +8,30 @@ app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
-// ==================== POSTGRESQL ====================
+console.log('DATABASE_URL presente:', !!process.env.DATABASE_URL);
+
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false }   // Necesario en Render Free
+  ssl: { rejectUnauthorized: false }
 });
 
-// Crear tabla si no existe
 async function initDB() {
   try {
+    console.log('🔄 Intentando conectar a PostgreSQL...');
     await pool.query(`
       CREATE TABLE IF NOT EXISTS storage (
         key TEXT PRIMARY KEY,
         value TEXT
       );
     `);
-    console.log('✅ Tabla storage creada o ya existe en PostgreSQL');
+    console.log('✅ PostgreSQL conectado correctamente - Tabla storage lista');
   } catch (err) {
-    console.error('❌ Error al crear tabla:', err.message);
+    console.error('❌ ERROR AL CONECTAR A POSTGRESQL:', err.message);
+    console.error('Revisa que DATABASE_URL sea la EXTERNAL URL completa');
   }
 }
 
-// API Storage con PostgreSQL
+// Resto de las rutas API (igual que antes)
 app.get('/api/storage/:key', async (req, res) => {
   try {
     const key = decodeURIComponent(req.params.key);
@@ -37,23 +39,23 @@ app.get('/api/storage/:key', async (req, res) => {
     const value = result.rows[0] ? JSON.parse(result.rows[0].value) : null;
     res.json({ value });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ value: null });
+    console.error('GET error:', err.message);
+    res.json({ value: null });
   }
 });
 
 app.post('/api/storage/:key', async (req, res) => {
   try {
     const key = decodeURIComponent(req.params.key);
-    const value = JSON.stringify(req.body.value);
+    const valueStr = JSON.stringify(req.body.value);
     await pool.query(
       'INSERT INTO storage (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = $2',
-      [key, value]
+      [key, valueStr]
     );
     res.json({ success: true });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ success: false });
+    console.error('POST error:', err.message);
+    res.json({ success: false });
   }
 });
 
@@ -63,22 +65,18 @@ app.delete('/api/storage/:key', async (req, res) => {
     await pool.query('DELETE FROM storage WHERE key = $1', [key]);
     res.json({ success: true });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ success: false });
+    console.error('DELETE error:', err.message);
+    res.json({ success: false });
   }
 });
 
-// Servir frontend
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-// Iniciar
 initDB().then(() => {
   const PORT = process.env.PORT || 3000;
   app.listen(PORT, () => {
-    console.log(`🚀 Prode Mundial 2026 con PostgreSQL en puerto ${PORT}`);
+    console.log(`🚀 Servidor corriendo en puerto ${PORT}`);
   });
-}).catch(err => {
-  console.error('Error fatal:', err);
-});
+}).catch(err => console.error('Error fatal:', err));
