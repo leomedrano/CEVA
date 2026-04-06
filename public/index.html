@@ -91,7 +91,9 @@
 <div id="modal-root"></div>
 
 <script>
-// POLYFILL STORAGE (más robusto para Render)
+// ===============================================
+// POLYFILL STORAGE PARA POSTGRESQL - VERSIÓN FINAL
+// ===============================================
 window.storage = {
   async get(key, shared = true) {
     if (!shared) {
@@ -99,14 +101,18 @@ window.storage = {
       return raw === null ? { value: null } : { value: JSON.parse(raw) };
     }
     try {
-      const res = await fetch(`/api/storage/${encodeURIComponent(key)}`);
-      if (!res.ok) return { value: null };
+      const res = await fetch(`/api/storage/${encodeURIComponent(key)}`, { 
+        method: 'GET',
+        cache: 'no-store'
+      });
+      if (!res.ok) throw new Error('Network error');
       return await res.json();
-    } catch(e) {
-      console.warn('Storage GET falló, usando fallback', e);
+    } catch (e) {
+      console.error(`[Storage] GET ${key} falló:`, e.message);
       return { value: null };
     }
   },
+
   async set(key, value, shared = true) {
     if (!shared) {
       if (value == null) localStorage.removeItem(key);
@@ -117,12 +123,14 @@ window.storage = {
       await fetch(`/api/storage/${encodeURIComponent(key)}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ value })
+        body: JSON.stringify({ value }),
+        cache: 'no-store'
       });
-    } catch(e) {
-      console.warn('Storage SET falló', e);
+    } catch (e) {
+      console.error(`[Storage] SET ${key} falló:`, e.message);
     }
   },
+
   async delete(key, shared = true) {
     if (!shared) {
       localStorage.removeItem(key);
@@ -130,7 +138,9 @@ window.storage = {
     }
     try {
       await fetch(`/api/storage/${encodeURIComponent(key)}`, { method: 'DELETE' });
-    } catch(e) {}
+    } catch (e) {
+      console.error(`[Storage] DELETE ${key} falló:`, e.message);
+    }
   }
 };
 // ===============================================
