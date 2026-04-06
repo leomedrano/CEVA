@@ -1,0 +1,14 @@
+{
+  "tenants": {
+    "demo": {
+      "users": {
+        "admin": {
+          "pass": "admin123",
+          "isAdmin": true,
+          "predictions": {}
+        }
+      },
+      "results": {}
+    }
+  }
+}
