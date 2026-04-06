@@ -52,7 +52,7 @@ const userQueries = {
   getAll: db.prepare('SELECT username FROM users ORDER BY id'),
   getByUsername: db.prepare('SELECT * FROM users WHERE username = ?'),
   create: db.prepare('INSERT INTO users (username, password, is_designated_admin) VALUES (?, ?, ?)'),
-  updatePassword: db.prepare('UPDATE password = ? WHERE username = ?'),
+  updatePassword: db.prepare('UPDATE users SET password = ? WHERE username = ?'),
   updateUsername: db.prepare('UPDATE users SET username = ? WHERE username = ?'),
   delete: db.prepare('DELETE FROM users WHERE username = ?'),
   countAll: db.prepare('SELECT COUNT(*) as count FROM users'),
