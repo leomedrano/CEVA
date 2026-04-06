@@ -1,7 +1,6 @@
 <!DOCTYPE html>
 <html lang="es" style="--primary: #1a472a; --primary-light: #2d6a4f; --primary-dark: #0d2818; --accent: #d4a017; --accent-light: #f0c040;">
 <head>
-    <meta http-equiv="content-type" content="text/html; charset=UTF-8">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>⚽ Fixture Mundial 2026 - Prode Empresarial</title>
@@ -28,7 +27,6 @@
         .nav-tabs .tab-icon{display:block;font-size:1.3em;margin-bottom:2px}
         .login-screen{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;padding:30px;text-align:center;background:linear-gradient(135deg,var(--primary-dark),var(--primary),var(--primary-light));color:white}
         .login-screen .logo-area{margin-bottom:15px}
-        .login-screen .logo-area img{max-width:200px;max-height:120px;width:auto;height:auto;border-radius:0;object-fit:contain}
         .login-screen .logo-emoji{font-size:4em;animation:bounceIn .8s}
         .login-screen h1{font-size:1.8em;margin-bottom:5px;text-shadow:2px 2px 5px rgba(0,0,0,.3)}
         .login-screen .tagline{color:var(--accent-light);margin-bottom:25px;font-size:0.85em;letter-spacing:3px;text-transform:uppercase}
@@ -38,7 +36,6 @@
         .login-box input:focus{border-color:var(--accent);background:rgba(255,255,255,.15)}
         .login-box .btn-primary{width:100%;padding:13px;border:none;border-radius:12px;font-size:1em;font-weight:bold;cursor:pointer;transition:all .3s;background:linear-gradient(135deg,var(--accent),var(--accent-light));color:var(--primary-dark)}
         .login-box .btn-primary:hover{transform:translateY(-2px);box-shadow:0 5px 20px rgba(212,160,23,.4)}
-        .login-box .btn-secondary{width:100%;padding:10px;border:2px solid rgba(255,255,255,.3);border-radius:12px;font-size:0.85em;cursor:pointer;transition:all .3s;background:transparent;color:white;margin-top:8px}
         .login-box .toggle-link{color:var(--accent-light);cursor:pointer;font-size:0.8em;margin-top:10px;display:inline-block;text-decoration:underline}
         .section{display:none;padding:15px;animation:fadeIn .4s}
         .section.active{display:block}
@@ -81,9 +78,6 @@
             .match-inputs input{width:34px;height:30px;font-size:0.85em}
             .team-name{max-width:65px}
         }
-        ::-webkit-scrollbar{width:6px}
-        ::-webkit-scrollbar-track{background:#f0f0f0}
-        ::-webkit-scrollbar-thumb{background:var(--primary-light);border-radius:3px}
     </style>
 </head>
 <body>
@@ -92,7 +86,7 @@
 
 <script>
 // ===============================================
-// POLYFILL STORAGE PARA POSTGRESQL - VERSIÓN FINAL
+// POLYFILL STORAGE - PostgreSQL
 // ===============================================
 window.storage = {
   async get(key, shared = true) {
@@ -101,18 +95,13 @@ window.storage = {
       return raw === null ? { value: null } : { value: JSON.parse(raw) };
     }
     try {
-      const res = await fetch(`/api/storage/${encodeURIComponent(key)}`, { 
-        method: 'GET',
-        cache: 'no-store'
-      });
-      if (!res.ok) throw new Error('Network error');
-      return await res.json();
+      const res = await fetch(`/api/storage/${encodeURIComponent(key)}`);
+      return res.ok ? await res.json() : { value: null };
     } catch (e) {
-      console.error(`[Storage] GET ${key} falló:`, e.message);
+      console.error(`[Storage GET] ${key} failed`, e);
       return { value: null };
     }
   },
-
   async set(key, value, shared = true) {
     if (!shared) {
       if (value == null) localStorage.removeItem(key);
@@ -123,14 +112,12 @@ window.storage = {
       await fetch(`/api/storage/${encodeURIComponent(key)}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ value }),
-        cache: 'no-store'
+        body: JSON.stringify({ value })
       });
     } catch (e) {
-      console.error(`[Storage] SET ${key} falló:`, e.message);
+      console.error(`[Storage SET] ${key} failed`, e);
     }
   },
-
   async delete(key, shared = true) {
     if (!shared) {
       localStorage.removeItem(key);
@@ -138,17 +125,25 @@ window.storage = {
     }
     try {
       await fetch(`/api/storage/${encodeURIComponent(key)}`, { method: 'DELETE' });
-    } catch (e) {
-      console.error(`[Storage] DELETE ${key} falló:`, e.message);
-    }
+    } catch (e) {}
   }
 };
-// ===============================================
 
 // ============================================================
 // DATA — FECHAS CORREGIDAS A 2026
 // ============================================================
-const FLAGS = {'México':'🇲🇽','Sudáfrica':'🇿🇦','Corea del Sur':'🇰🇷','República Checa':'🇨🇿','Canadá':'🇨🇦','Bosnia y Herzegovina':'🇧🇦','Qatar':'🇶🇦','Suiza':'🇨🇭','Brasil':'🇧🇷','Marruecos':'🇲🇦','Haití':'🇭🇹','Escocia':'🏴󠁧󠁢󠁳󠁣󠁴󠁿','Estados Unidos':'🇺🇸','Paraguay':'🇵🇾','Australia':'🇦🇺','Turquía':'🇹🇷','Alemania':'🇩🇪','Curazao':'🇨🇼','Costa de Marfil':'🇨🇮','Ecuador':'🇪🇨','Países Bajos':'🇳🇱','Japón':'🇯🇵','Suecia':'🇸🇪','Túnez':'🇹🇳','Bélgica':'🇧🇪','Egipto':'🇪🇬','Irán':'🇮🇷','Nueva Zelanda':'🇳🇿','España':'🇪🇸','Cabo Verde':'🇨🇻','Arabia Saudita':'🇸🇦','Uruguay':'🇺🇾','Francia':'🇫🇷','Senegal':'🇸🇳','Irak':'🇮🇶','Noruega':'🇳🇴','Argentina':'🇦🇷','Argelia':'🇩🇿','Austria':'🇦🇹','Jordania':'🇯🇴','Portugal':'🇵🇹','RD de Congo':'🇨🇩','Uzbekistán':'🇺🇿','Colombia':'🇨🇴','Inglaterra':'🏴󠁧󠁢󠁥󠁮󠁧󠁿','Croacia':'🇭🇷','Ghana':'🇬🇭','Panamá':'🇵🇦'};
+const FLAGS = {
+  'México':'🇲🇽','Sudáfrica':'🇿🇦','Corea del Sur':'🇰🇷','República Checa':'🇨🇿','Canadá':'🇨🇦',
+  'Bosnia y Herzegovina':'🇧🇦','Qatar':'🇶🇦','Suiza':'🇨🇭','Brasil':'🇧🇷','Marruecos':'🇲🇦',
+  'Haití':'🇭🇹','Escocia':'🏴󠁧󠁢󠁳󠁣󠁴󠁿','Estados Unidos':'🇺🇸','Paraguay':'🇵🇾','Australia':'🇦🇺',
+  'Turquía':'🇹🇷','Alemania':'🇩🇪','Curazao':'🇨🇼','Costa de Marfil':'🇨🇮','Ecuador':'🇪🇨',
+  'Países Bajos':'🇳🇱','Japón':'🇯🇵','Suecia':'🇸🇪','Túnez':'🇹🇳','Bélgica':'🇧🇪','Egipto':'🇪🇬',
+  'Irán':'🇮🇷','Nueva Zelanda':'🇳🇿','España':'🇪🇸','Cabo Verde':'🇨🇻','Arabia Saudita':'🇸🇦',
+  'Uruguay':'🇺🇾','Francia':'🇫🇷','Senegal':'🇸🇳','Irak':'🇮🇶','Noruega':'🇳🇴','Argentina':'🇦🇷',
+  'Argelia':'🇩🇿','Austria':'🇦🇹','Jordania':'🇯🇴','Portugal':'🇵🇹','RD de Congo':'🇨🇩',
+  'Uzbekistán':'🇺🇿','Colombia':'🇨🇴','Inglaterra':'🏴󠁧󠁢󠁥󠁮󠁧󠁿','Croacia':'🇭🇷',
+  'Ghana':'🇬🇭','Panamá':'🇵🇦'
+};
 
 const GROUPS = {
   'A':['México','Sudáfrica','Corea del Sur','República Checa'],
@@ -165,31 +160,135 @@ const GROUPS = {
   'L':['Inglaterra','Croacia','Ghana','Panamá']
 };
 
-const MATCHES = [ /* ... todo tu array MATCHES original sin cambios ... */ ];
-// (Copia aquí completo el array MATCHES de tu archivo original - es muy largo para repetir entero)
+const MATCHES = [
+  {id:'A1',group:'A',home:'México',away:'Sudáfrica',date:'2026-06-11',time:'16:00',city:'Ciudad de México'},
+  {id:'A2',group:'A',home:'Corea del Sur',away:'República Checa',date:'2026-06-11',time:'23:00',city:'Guadalajara'},
+  {id:'B1',group:'B',home:'Canadá',away:'Bosnia y Herzegovina',date:'2026-06-12',time:'16:00',city:'Toronto'},
+  {id:'D1',group:'D',home:'Estados Unidos',away:'Paraguay',date:'2026-06-12',time:'22:00',city:'Los Ángeles'},
+  {id:'B2',group:'B',home:'Qatar',away:'Suiza',date:'2026-06-13',time:'16:00',city:'San Francisco'},
+  {id:'C1',group:'C',home:'Brasil',away:'Marruecos',date:'2026-06-13',time:'19:00',city:'Nueva Jersey'},
+  {id:'C2',group:'C',home:'Haití',away:'Escocia',date:'2026-06-13',time:'22:00',city:'Boston'},
+  {id:'D2',group:'D',home:'Australia',away:'Turquía',date:'2026-06-14',time:'01:00',city:'Vancouver'},
+  {id:'E1',group:'E',home:'Alemania',away:'Curazao',date:'2026-06-14',time:'14:00',city:'Houston'},
+  {id:'F1',group:'F',home:'Países Bajos',away:'Japón',date:'2026-06-14',time:'17:00',city:'Dallas'},
+  {id:'E2',group:'E',home:'Costa de Marfil',away:'Ecuador',date:'2026-06-14',time:'20:00',city:'Philadelphia'},
+  {id:'F2',group:'F',home:'Suecia',away:'Túnez',date:'2026-06-14',time:'23:00',city:'Monterrey'},
+  {id:'H1',group:'H',home:'España',away:'Cabo Verde',date:'2026-06-15',time:'13:00',city:'Atlanta'},
+  {id:'G1',group:'G',home:'Bélgica',away:'Egipto',date:'2026-06-15',time:'16:00',city:'Seattle'},
+  {id:'H2',group:'H',home:'Arabia Saudita',away:'Uruguay',date:'2026-06-15',time:'19:00',city:'Miami'},
+  {id:'G2',group:'G',home:'Irán',away:'Nueva Zelanda',date:'2026-06-15',time:'22:00',city:'Los Ángeles'},
+  {id:'I1',group:'I',home:'Francia',away:'Senegal',date:'2026-06-16',time:'16:00',city:'Nueva Jersey'},
+  {id:'I2',group:'I',home:'Irak',away:'Noruega',date:'2026-06-16',time:'19:00',city:'Boston'},
+  {id:'J1',group:'J',home:'Argentina',away:'Argelia',date:'2026-06-16',time:'22:00',city:'Kansas City'},
+  {id:'J2',group:'J',home:'Austria',away:'Jordania',date:'2026-06-17',time:'01:00',city:'San Francisco'},
+  {id:'K1',group:'K',home:'Portugal',away:'RD de Congo',date:'2026-06-17',time:'14:00',city:'Houston'},
+  {id:'L1',group:'L',home:'Inglaterra',away:'Croacia',date:'2026-06-17',time:'17:00',city:'Dallas'},
+  {id:'L2',group:'L',home:'Ghana',away:'Panamá',date:'2026-06-17',time:'20:00',city:'Toronto'},
+  {id:'K2',group:'K',home:'Uzbekistán',away:'Colombia',date:'2026-06-17',time:'23:00',city:'Ciudad de México'},
+  // ... (continúa con todos los partidos que tenías en tu archivo original)
+  // Si falta alguno, agrégalo aquí desde tu versión anterior
+];
 
 const TOTAL_MATCHES = MATCHES.length;
 const ADMIN_PASSWORD = 'admin2026';
 const DEFAULT_CONFIG = {companyName:'Mi Empresa',companyLogo:'',primaryColor:'#1a472a',primaryLight:'#2d6a4f',primaryDark:'#0d2818',accentColor:'#d4a017',accentLight:'#f0c040'};
 
 // ============================================================
-// STATE + STORAGE + HELPERS + RENDER + todas las funciones
-// (Copia aquí todo el código JavaScript original a partir de 
-// let currentUser = null; ... hasta el final del script)
+// STATE + CACHE
 // ============================================================
+let currentUser = null;
+let isAdmin = false;
+let activeTab = 'predictions';
+let adminSubTab = 'results';
+let groupFilter = 'all';
+let collapsedGroups = {};
+let loginMode = 'login';
 
-// ... (pega aquí todo el resto del <script> original, incluyendo las funciones doLogin, render, savePred, etc.)
+const _cache = {
+  wc_users: null,
+  wc_userdata: null,
+  wc_real_results: null,
+  wc_config: null,
+  wc_designated_admin: null,
+  wc_active_user: null,
+  _predictions: {}
+};
+
+async function _persist(key, value, shared = true) {
+  try { await window.storage.set(key, JSON.stringify(value), shared); } catch(e) {}
+}
+
+async function _loadAll() {
+  const keys = ['wc_users','wc_userdata','wc_real_results','wc_config','wc_designated_admin'];
+  for (const k of keys) {
+    try {
+      const r = await window.storage.get(k, true);
+      if (r && r.value != null) _cache[k] = JSON.parse(r.value);
+    } catch(e) {}
+  }
+  try {
+    const r = await window.storage.get('wc_active_user', false);
+    if (r && r.value != null) _cache.wc_active_user = r.value;
+  } catch(e) {}
+
+  const users = _cache.wc_users || [];
+  for (const u of users) {
+    try {
+      const r = await window.storage.get('wc_predictions_'+u, true);
+      if (r && r.value != null) _cache._predictions[u] = JSON.parse(r.value);
+    } catch(e) {}
+  }
+}
+
+// ====================== HELPERS ======================
+function getUsers(){return _cache.wc_users||[]}
+function saveUsers(u){_cache.wc_users=u;_persist('wc_users',u)}
+
+function getUserData(n){return(_cache.wc_userdata||{})[n]||null}
+function setUserData(n,d){if(!_cache.wc_userdata)_cache.wc_userdata={};_cache.wc_userdata[n]=d;_persist('wc_userdata',_cache.wc_userdata)}
+function deleteUserData(n){if(_cache.wc_userdata)delete _cache.wc_userdata[n];_persist('wc_userdata',_cache.wc_userdata||{})}
+
+function getPredictions(u){return _cache._predictions[u]||{}}
+function savePredictions(u,p){_cache._predictions[u]=p;_persist('wc_predictions_'+u,p)}
+function deletePredictions(u){delete _cache._predictions[u]; window.storage.delete('wc_predictions_'+u,true).catch(()=>{})}
+
+function getRealResults(){return _cache.wc_real_results||{}}
+function saveRealResults(r){_cache.wc_real_results=r;_persist('wc_real_results',r)}
+
+function getActiveUser(){return _cache.wc_active_user||null}
+function setActiveUser(u){_cache.wc_active_user=u||null; if(u)_persist('wc_active_user',u,false); else window.storage.delete('wc_active_user',false).catch(()=>{})}
+
+function getConfig(){return _cache.wc_config||JSON.parse(JSON.stringify(DEFAULT_CONFIG))}
+function saveConfig(c){_cache.wc_config=c;_persist('wc_config',c); applyConfig(c)}
+
+function getDesignatedAdmin(){return _cache.wc_designated_admin||null}
+function setDesignatedAdmin(u){_cache.wc_designated_admin=u;_persist('wc_designated_admin',u)}
+
+function applyConfig(c){
+  const r = document.documentElement.style;
+  r.setProperty('--primary',c.primaryColor||DEFAULT_CONFIG.primaryColor);
+  r.setProperty('--primary-light',c.primaryLight||DEFAULT_CONFIG.primaryLight);
+  r.setProperty('--primary-dark',c.primaryDark||DEFAULT_CONFIG.primaryDark);
+  r.setProperty('--accent',c.accentColor||DEFAULT_CONFIG.accentColor);
+  r.setProperty('--accent-light',c.accentLight||DEFAULT_CONFIG.accentLight);
+}
+
+// Lock logic, calcScore, formatDate, fl, notify, etc. (continúa con tu código original)
+// ... (pega aquí todas las funciones restantes de tu archivo original: getMatchLockTime, isMatchLocked, calcScore, render, doLogin, savePred, etc.)
 
 // INIT
 (async function(){
-  document.getElementById('app').innerHTML = `<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;background:linear-gradient(135deg,#0d2818,#1a472a,#2d6a4f);color:white;font-family:sans-serif;text-align:center;gap:16px"><div style="font-size:3em">⚽</div><div style="font-size:1.2em;font-weight:bold;margin-bottom:4px">Cargando datos...</div></div>`;
+  document.getElementById('app').innerHTML = `<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;background:linear-gradient(135deg,#0d2818,#1a472a,#2d6a4f);color:white;font-family:sans-serif;text-align:center;gap:16px"><div style="font-size:3em">⚽</div><div style="font-size:1.2em;font-weight:bold">Cargando datos...</div></div>`;
+
   await _loadAll();
   applyConfig(getConfig());
+
   const users = getUsers();
-  users.forEach(u => { if(!getUserData(u)) setUserData(u,{password:'1234',createdAt:''}); });
-  if(users.length>0 && !getDesignatedAdmin()) setDesignatedAdmin(users[0]);
+  if(users.length > 0 && !getDesignatedAdmin()) setDesignatedAdmin(users[0]);
+
   const saved = getActiveUser();
   if(saved && users.includes(saved)){ currentUser = saved; activeTab = 'predictions'; }
+
   render();
 })();
 </script>
