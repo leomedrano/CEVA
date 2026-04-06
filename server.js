@@ -1,68 +1,71 @@
-// server.js  (versión corregida y mejorada)
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
-const { Low } = require('lowdb');
-const { JSONFile } = require('lowdb/node');
+const { Pool } = require('pg');
 
 const app = express();
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
-// ==================== LOWDB CONFIG ====================
-const adapter = new JSONFile('db.json');
-const defaultData = { storage: {} };   // ← Esto soluciona el error
+// ==================== POSTGRESQL ====================
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: { rejectUnauthorized: false }   // Necesario en Render Free
+});
 
-const db = new Low(adapter, defaultData);
-
-let dbReady = false;
-
+// Crear tabla si no existe
 async function initDB() {
   try {
-    await db.read();
-    // Si el archivo no existía, lowdb ya lo crea con defaultData
-    if (!db.data) db.data = defaultData;
-    await db.write();
-    dbReady = true;
-    console.log('✅ LowDB inicializado correctamente (db.json)');
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS storage (
+        key TEXT PRIMARY KEY,
+        value TEXT
+      );
+    `);
+    console.log('✅ Tabla storage creada o ya existe en PostgreSQL');
   } catch (err) {
-    console.error('❌ Error LowDB:', err.message);
-    // Fallback en memoria si falla el disco (Render Free)
-    db.data = defaultData;
-    dbReady = true;
-    console.log('⚠️ Usando base de datos en memoria (datos se pierden al reiniciar)');
+    console.error('❌ Error al crear tabla:', err.message);
   }
 }
 
-// ==================== API STORAGE ====================
+// API Storage con PostgreSQL
 app.get('/api/storage/:key', async (req, res) => {
-  if (!dbReady) return res.status(503).json({ value: null });
-  await db.read();
-  const key = decodeURIComponent(req.params.key);
-  res.json({ value: db.data.storage[key] ?? null });
+  try {
+    const key = decodeURIComponent(req.params.key);
+    const result = await pool.query('SELECT value FROM storage WHERE key = $1', [key]);
+    const value = result.rows[0] ? JSON.parse(result.rows[0].value) : null;
+    res.json({ value });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ value: null });
+  }
 });
 
 app.post('/api/storage/:key', async (req, res) => {
-  if (!dbReady) return res.status(503).json({ success: false });
-  await db.read();
-  const key = decodeURIComponent(req.params.key);
-  db.data.storage[key] = req.body.value;
   try {
-    await db.write();
-  } catch (e) { /* silenciar errores de escritura en Render Free */ }
-  res.json({ success: true });
+    const key = decodeURIComponent(req.params.key);
+    const value = JSON.stringify(req.body.value);
+    await pool.query(
+      'INSERT INTO storage (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = $2',
+      [key, value]
+    );
+    res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false });
+  }
 });
 
 app.delete('/api/storage/:key', async (req, res) => {
-  if (!dbReady) return res.status(503).json({ success: false });
-  await db.read();
-  const key = decodeURIComponent(req.params.key);
-  delete db.data.storage[key];
   try {
-    await db.write();
-  } catch (e) {}
-  res.json({ success: true });
+    const key = decodeURIComponent(req.params.key);
+    await pool.query('DELETE FROM storage WHERE key = $1', [key]);
+    res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false });
+  }
 });
 
 // Servir frontend
@@ -70,13 +73,12 @@ app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-// Iniciar servidor
+// Iniciar
 initDB().then(() => {
   const PORT = process.env.PORT || 3000;
   app.listen(PORT, () => {
-    console.log(`🚀 Prode Mundial 2026 corriendo en puerto ${PORT}`);
+    console.log(`🚀 Prode Mundial 2026 con PostgreSQL en puerto ${PORT}`);
   });
 }).catch(err => {
   console.error('Error fatal:', err);
-  process.exit(1);
 });
