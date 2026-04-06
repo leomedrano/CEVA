@@ -2,28 +2,21 @@ const Database = require('better-sqlite3');
 const path = require('path');
 const fs = require('fs');
 
-// Crear directorio data si no existe
 const dataDir = path.join(__dirname, 'data');
 if (!fs.existsSync(dataDir)) {
     fs.mkdirSync(dataDir, { recursive: true });
 }
 
 const db = new Database(path.join(dataDir, 'prode.db'));
-
-// Habilitar WAL mode para mejor rendimiento concurrente
 db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = ON');
 
-// ============================================================
-// CREAR TABLAS
-// ============================================================
 db.exec(`
     CREATE TABLE IF NOT EXISTS users (
         username TEXT PRIMARY KEY,
         password TEXT NOT NULL,
         created_at TEXT DEFAULT (datetime('now'))
     );
-
     CREATE TABLE IF NOT EXISTS predictions (
         username TEXT NOT NULL,
         match_id TEXT NOT NULL,
@@ -33,25 +26,21 @@ db.exec(`
         PRIMARY KEY (username, match_id),
         FOREIGN KEY (username) REFERENCES users(username) ON DELETE CASCADE
     );
-
     CREATE TABLE IF NOT EXISTS real_results (
         match_id TEXT PRIMARY KEY,
         home_score TEXT DEFAULT '',
         away_score TEXT DEFAULT ''
     );
-
     CREATE TABLE IF NOT EXISTS config (
         key TEXT PRIMARY KEY,
         value TEXT NOT NULL
     );
-
     CREATE TABLE IF NOT EXISTS app_settings (
         key TEXT PRIMARY KEY,
         value TEXT NOT NULL
     );
 `);
 
-// Inicializar configuración por defecto si no existe
 const defaultConfig = {
     companyName: 'Mi Empresa',
     companyLogo: '',
@@ -70,87 +59,62 @@ if (existingConfig.count === 0) {
     }
 }
 
-// ============================================================
-// FUNCIONES DE USUARIO
-// ============================================================
 const dbFunctions = {
-    // --- Usuarios ---
     getUsers() {
         return db.prepare('SELECT username FROM users ORDER BY created_at ASC').all().map(r => r.username);
     },
-
     getUser(username) {
         return db.prepare('SELECT * FROM users WHERE username = ?').get(username);
     },
-
     createUser(username, password) {
         try {
             db.prepare('INSERT INTO users (username, password) VALUES (?, ?)').run(username, password);
             return { success: true };
         } catch (e) {
-            if (e.message.includes('UNIQUE')) {
-                return { success: false, error: 'Usuario ya existe' };
-            }
+            if (e.message.includes('UNIQUE')) return { success: false, error: 'Usuario ya existe' };
             throw e;
         }
     },
-
     updateUser(oldUsername, newUsername, password) {
         const transaction = db.transaction(() => {
             if (oldUsername !== newUsername) {
-                // Verificar que el nuevo nombre no exista
                 const existing = db.prepare('SELECT username FROM users WHERE username = ?').get(newUsername);
                 if (existing) return { success: false, error: 'Nombre ya existe' };
-
-                // Crear nuevo usuario
                 db.prepare('INSERT INTO users (username, password) VALUES (?, ?)').run(newUsername, password);
-
-                // Migrar predicciones
                 db.prepare('UPDATE predictions SET username = ? WHERE username = ?').run(newUsername, oldUsername);
-
-                // Eliminar usuario viejo
                 db.prepare('DELETE FROM users WHERE username = ?').run(oldUsername);
-
-                // Actualizar admin designado si corresponde
                 const admin = db.prepare("SELECT value FROM app_settings WHERE key = 'designated_admin'").get();
                 if (admin && admin.value === oldUsername) {
                     db.prepare("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('designated_admin', ?)").run(newUsername);
                 }
             } else {
-                db.prepare('UPDATE users SET password = ? WHERE username = ?').run(password, oldUsername);
+                if (password) {
+                    db.prepare('UPDATE users SET password = ? WHERE username = ?').run(password, oldUsername);
+                }
             }
             return { success: true };
         });
         return transaction();
     },
-
     deleteUser(username) {
-        const transaction = db.transaction(() => {
+        db.transaction(() => {
             db.prepare('DELETE FROM predictions WHERE username = ?').run(username);
             db.prepare('DELETE FROM users WHERE username = ?').run(username);
-        });
-        transaction();
+        })();
     },
-
     deleteAllUsers() {
-        const transaction = db.transaction(() => {
+        db.transaction(() => {
             db.prepare('DELETE FROM predictions').run();
             db.prepare('DELETE FROM users').run();
             db.prepare("DELETE FROM app_settings WHERE key = 'designated_admin'").run();
-        });
-        transaction();
+        })();
     },
-
-    // --- Predicciones ---
     getPredictions(username) {
         const rows = db.prepare('SELECT match_id, home_score, away_score FROM predictions WHERE username = ?').all(username);
         const result = {};
-        rows.forEach(r => {
-            result[r.match_id] = { home: r.home_score, away: r.away_score };
-        });
+        rows.forEach(r => { result[r.match_id] = { home: r.home_score, away: r.away_score }; });
         return result;
     },
-
     getAllPredictions() {
         const rows = db.prepare('SELECT username, match_id, home_score, away_score FROM predictions').all();
         const result = {};
@@ -160,52 +124,22 @@ const dbFunctions = {
         });
         return result;
     },
-
     savePrediction(username, matchId, home, away) {
-        db.prepare(`
-            INSERT OR REPLACE INTO predictions (username, match_id, home_score, away_score, updated_at)
-            VALUES (?, ?, ?, ?, datetime('now'))
-        `).run(username, matchId, home, away);
+        db.prepare("INSERT OR REPLACE INTO predictions (username, match_id, home_score, away_score, updated_at) VALUES (?, ?, ?, ?, datetime('now'))").run(username, matchId, home, away);
     },
-
-    savePredictions(username, predictions) {
-        const insert = db.prepare(`
-            INSERT OR REPLACE INTO predictions (username, match_id, home_score, away_score, updated_at)
-            VALUES (?, ?, ?, ?, datetime('now'))
-        `);
-        const transaction = db.transaction(() => {
-            for (const [matchId, scores] of Object.entries(predictions)) {
-                insert.run(username, matchId, scores.home || '', scores.away || '');
-            }
-        });
-        transaction();
-    },
-
     resetPredictions(username, matchIds) {
         const del = db.prepare('DELETE FROM predictions WHERE username = ? AND match_id = ?');
-        const transaction = db.transaction(() => {
-            matchIds.forEach(id => del.run(username, id));
-        });
-        transaction();
+        db.transaction(() => { matchIds.forEach(id => del.run(username, id)); })();
     },
-
-    // --- Resultados Reales ---
     getRealResults() {
         const rows = db.prepare('SELECT match_id, home_score, away_score FROM real_results').all();
         const result = {};
-        rows.forEach(r => {
-            result[r.match_id] = { home: r.home_score, away: r.away_score };
-        });
+        rows.forEach(r => { result[r.match_id] = { home: r.home_score, away: r.away_score }; });
         return result;
     },
-
     saveRealResults(results) {
-        const insert = db.prepare(`
-            INSERT OR REPLACE INTO real_results (match_id, home_score, away_score)
-            VALUES (?, ?, ?)
-        `);
-        const transaction = db.transaction(() => {
-            // Limpiar resultados vacíos
+        const insert = db.prepare('INSERT OR REPLACE INTO real_results (match_id, home_score, away_score) VALUES (?, ?, ?)');
+        db.transaction(() => {
             for (const [matchId, scores] of Object.entries(results)) {
                 if (scores.home !== '' || scores.away !== '') {
                     insert.run(matchId, scores.home || '', scores.away || '');
@@ -213,15 +147,11 @@ const dbFunctions = {
                     db.prepare('DELETE FROM real_results WHERE match_id = ?').run(matchId);
                 }
             }
-        });
-        transaction();
+        })();
     },
-
     clearRealResults() {
         db.prepare('DELETE FROM real_results').run();
     },
-
-    // --- Configuración ---
     getConfig() {
         const rows = db.prepare('SELECT key, value FROM config').all();
         const result = {};
@@ -236,38 +166,29 @@ const dbFunctions = {
             accentLight: result.accentLight || defaultConfig.accentLight
         };
     },
-
     saveConfig(config) {
         const insert = db.prepare('INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)');
-        const transaction = db.transaction(() => {
+        db.transaction(() => {
             for (const [key, value] of Object.entries(config)) {
                 insert.run(key, value || '');
             }
-        });
-        transaction();
+        })();
     },
-
     resetConfig() {
         const insert = db.prepare('INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)');
-        const transaction = db.transaction(() => {
+        db.transaction(() => {
             for (const [key, value] of Object.entries(defaultConfig)) {
                 insert.run(key, value);
             }
-        });
-        transaction();
+        })();
     },
-
-    // --- App Settings ---
     getDesignatedAdmin() {
         const row = db.prepare("SELECT value FROM app_settings WHERE key = 'designated_admin'").get();
         return row ? row.value : null;
     },
-
     setDesignatedAdmin(username) {
         db.prepare("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('designated_admin', ?)").run(username);
     },
-
-    // --- Export/Import ---
     exportAll() {
         return {
             users: db.prepare('SELECT * FROM users').all(),
@@ -277,47 +198,34 @@ const dbFunctions = {
             app_settings: db.prepare('SELECT * FROM app_settings').all()
         };
     },
-
     importAll(data) {
-        const transaction = db.transaction(() => {
-            // Limpiar todo
+        db.transaction(() => {
             db.prepare('DELETE FROM predictions').run();
             db.prepare('DELETE FROM users').run();
             db.prepare('DELETE FROM real_results').run();
             db.prepare('DELETE FROM config').run();
             db.prepare('DELETE FROM app_settings').run();
-
-            // Importar usuarios
             if (data.users) {
                 const ins = db.prepare('INSERT INTO users (username, password, created_at) VALUES (?, ?, ?)');
                 data.users.forEach(u => ins.run(u.username, u.password, u.created_at || new Date().toISOString()));
             }
-
-            // Importar predicciones
             if (data.predictions) {
                 const ins = db.prepare('INSERT INTO predictions (username, match_id, home_score, away_score, updated_at) VALUES (?, ?, ?, ?, ?)');
                 data.predictions.forEach(p => ins.run(p.username, p.match_id, p.home_score || '', p.away_score || '', p.updated_at || new Date().toISOString()));
             }
-
-            // Importar resultados reales
             if (data.real_results) {
                 const ins = db.prepare('INSERT INTO real_results (match_id, home_score, away_score) VALUES (?, ?, ?)');
                 data.real_results.forEach(r => ins.run(r.match_id, r.home_score || '', r.away_score || ''));
             }
-
-            // Importar config
             if (data.config) {
                 const ins = db.prepare('INSERT INTO config (key, value) VALUES (?, ?)');
                 data.config.forEach(c => ins.run(c.key, c.value || ''));
             }
-
-            // Importar app_settings
             if (data.app_settings) {
                 const ins = db.prepare('INSERT INTO app_settings (key, value) VALUES (?, ?)');
                 data.app_settings.forEach(s => ins.run(s.key, s.value || ''));
             }
-        });
-        transaction();
+        })();
     }
 };
 
